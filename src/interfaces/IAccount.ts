@@ -13,4 +13,5 @@ export interface IAccount {
 
   getSummary(): ISummary;
   getSummaryString(): string;
+  exportTransactionsToCSV(fileBaseName: string): Promise<string>;
 }

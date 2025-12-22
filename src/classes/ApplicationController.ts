@@ -360,12 +360,8 @@ export class ApplicationController {
       },
     ]);
 
-    // Метод в классе Account, но интерфейс IAccount его не описывает.
-    // Поэтому делаем безопасное приведение (реально это будет Account).
-    const acc = account as Account;
-
     try {
-      const filename = await acc.exportTransactionsToCSV(fileBase);
+      const filename = await account.exportTransactionsToCSV(fileBase);
       await this.pause(`Экспорт готов: ${filename}`);
     } catch (e: unknown) {
       await this.pause(`Ошибка экспорта: ${String(e)}`);
