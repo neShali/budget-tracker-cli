@@ -7,6 +7,9 @@ import type {
   Update,
 } from '../interfaces/index.js';
 
+import { writeFile } from 'node:fs/promises';
+import { escapeCsvValue } from '../utils/index.js';
+
 export type AccountCreateInput = {
   name: string;
   id?: string;
@@ -117,6 +120,40 @@ export class Account implements IAccount {
     if (typeof patch.name === 'string') {
       this.name = patch.name;
     }
+  }
+
+  async exportTransactionsToCSV(fileBaseName: string): Promise<string> {
+    const safeBase = fileBaseName.trim();
+    const name =
+      safeBase.length > 0 ? safeBase : `account_${this._id.slice(0, 8)}`;
+    const filename = name.endsWith('.csv') ? name : `${name}.csv`;
+
+    const header = [
+      'transaction_id',
+      'account_id',
+      'type',
+      'amount',
+      'date',
+      'description',
+    ];
+
+    const rows = this._transactions.map((t) => [
+      t.id,
+      t.accountId,
+      t.type,
+      String(t.amount),
+      t.date,
+      t.description ?? '',
+    ]);
+
+    const csv =
+      [header, ...rows]
+        .map((cols) => cols.map((c) => escapeCsvValue(c)).join(','))
+        .join('\n') + '\n';
+
+    await writeFile(filename, csv, { encoding: 'utf-8' });
+
+    return filename;
   }
 }
 
