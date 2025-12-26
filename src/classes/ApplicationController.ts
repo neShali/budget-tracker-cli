@@ -9,6 +9,11 @@ import {
   shortId,
 } from '../utils/cliUi.js';
 
+import {
+  parsePositiveNumber,
+  validateYmdOrEmpty,
+} from '../utils/validators.js';
+
 type MenuAction =
   | 'openAccount'
   | 'createAccount'
@@ -17,7 +22,8 @@ type MenuAction =
   | 'addTx'
   | 'removeTx'
   | 'exportCsv'
-  | 'removeAccount';
+  | 'removeAccount'
+  | 'renameAccount';
 
 export class ApplicationController {
   public readonly accountManager: AccountManager;
@@ -29,7 +35,6 @@ export class ApplicationController {
   public async start(): Promise<void> {
     seedInitialState(this);
 
-    // основной цикл
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const selected = await this.showMainMenu();
@@ -118,39 +123,62 @@ export class ApplicationController {
     await this.pause(`Счёт создан: "${created.value.name}"`);
   }
 
-  public async watchAccount(accountId: string): Promise<void> {
+  private renderAccountScreen(accountId: string): void {
     const account = this.accountManager.getAccountById(accountId);
     if (!account) {
-      await this.pause('Счёт не найден');
+      console.log('Счёт не найден');
       return;
     }
 
-    // цикл меню выбранного счёта
+    console.log(account.getSummaryString());
+    console.log('\n' + title('Транзакции') + '\n');
+
+    if (account.transactions.length === 0) {
+      console.log('— транзакций пока нет —');
+      return;
+    }
+
+    account.transactions.forEach((t, i) => {
+      console.log(`${String(i + 1).padStart(2, '0')}. ${t.toString()}`);
+    });
+  }
+
+  public async watchAccount(accountId: string): Promise<void> {
     // eslint-disable-next-line no-constant-condition
     while (true) {
+      const account = this.accountManager.getAccountById(accountId);
+      if (!account) {
+        await this.pause('Счёт не найден (возможно, был удалён)');
+        return;
+      }
+
       console.clear();
+      this.renderAccountScreen(accountId);
+
+      const hasTx = account.transactions.length > 0;
 
       const { action } = await inquirer.prompt<{ action: MenuAction }>([
         {
           type: 'list',
           name: 'action',
-          message: `Меню счёта — ${account.name}`,
+          message: 'Действия:',
           choices: [
-            { name: '📌 Показать сводку', value: 'back' }, // просто покажем ниже, а потом меню снова
             { name: '➕ Добавить транзакцию', value: 'addTx' },
-            { name: '🗑️ Удалить транзакцию', value: 'removeTx' },
+            hasTx
+              ? { name: '🗑️ Удалить транзакцию', value: 'removeTx' }
+              : {
+                  name: '🗑️ Удалить транзакцию',
+                  value: 'removeTx',
+                  disabled: 'Нет транзакций',
+                },
             { name: '📤 Экспорт в CSV', value: 'exportCsv' },
             { name: '❌ Удалить счёт', value: 'removeAccount' },
-            { name: '⬅️ Назад к списку счетов', value: 'exit' }, // выйдем из watchAccount
+            { name: '✏️ Переименовать счёт', value: 'renameAccount' },
+            { name: '⬅️ Назад к списку счетов', value: 'exit' },
           ],
-          pageSize: 12,
+          pageSize: 10,
         },
       ]);
-
-      if (action === 'back') {
-        await this.showAccountSummary(accountId);
-        continue;
-      }
 
       if (action === 'addTx') {
         await this.addTransaction(accountId);
@@ -173,11 +201,16 @@ export class ApplicationController {
         continue;
       }
 
+      if (action === 'renameAccount') {
+        await this.renameAccount(accountId);
+        continue;
+      }
+
       if (action === 'exit') return;
     }
   }
 
-  private async showAccountSummary(accountId: string): Promise<void> {
+  public async renameAccount(accountId: string): Promise<void> {
     const account = this.accountManager.getAccountById(accountId);
     if (!account) {
       await this.pause('Счёт не найден');
@@ -185,18 +218,27 @@ export class ApplicationController {
     }
 
     console.clear();
-    console.log(account.getSummaryString());
-    console.log('\n' + title('Транзакции') + '\n');
+    console.log(title('Переименование счёта'));
+    console.log(`Текущее имя: ${account.name}\n`);
 
-    if (account.transactions.length === 0) {
-      console.log('— транзакций пока нет —');
-    } else {
-      account.transactions.forEach((t, i) => {
-        console.log(`${String(i + 1).padStart(2, '0')}. ${t.toString()}`);
-      });
+    const { name } = await inquirer.prompt<{ name: string }>([
+      {
+        type: 'input',
+        name: 'name',
+        message: 'Новое название:',
+        validate: (v: string) =>
+          v.trim().length > 0 ? true : 'Название не должно быть пустым',
+      },
+    ]);
+
+    const res = this.accountManager.renameAccount(accountId, { name });
+
+    if (!res.ok) {
+      await this.pause(`Не удалось переименовать: ${res.error}`);
+      return;
     }
 
-    await this.pause();
+    await this.pause('Счёт переименован');
   }
 
   public async addTransaction(accountId: string): Promise<void> {
@@ -217,11 +259,10 @@ export class ApplicationController {
       {
         type: 'input',
         name: 'amount',
-        message: 'Сумма (число больше 0):',
+        message: 'Сумма (число > 0):',
         validate: (v: string) => {
-          const n = Number(v);
-          if (!Number.isFinite(n) || n <= 0) return 'Введите число больше 0';
-          return true;
+          const res = parsePositiveNumber(v);
+          return res.ok ? true : res.error;
         },
       },
       {
@@ -238,13 +279,7 @@ export class ApplicationController {
         name: 'date',
         message: 'Дата (YYYY-MM-DD, пусто = сегодня):',
         default: '',
-        validate: (v: string) => {
-          const s = v.trim();
-          if (s.length === 0) return true;
-          return /^\d{4}-\d{2}-\d{2}$/.test(s)
-            ? true
-            : 'Формат даты: YYYY-MM-DD';
-        },
+        validate: validateYmdOrEmpty,
       },
       {
         type: 'input',
@@ -254,11 +289,15 @@ export class ApplicationController {
       },
     ]);
 
-    const amount = Number(answers.amount);
+    const amountRes = parsePositiveNumber(answers.amount);
+    if (!amountRes.ok) {
+      await this.pause(amountRes.error);
+      return;
+    }
 
     const created = Transaction.create({
       accountId: account.id,
-      amount,
+      amount: amountRes.value,
       type: answers.type,
       date: answers.date,
       description: answers.description,
