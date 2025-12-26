@@ -18,7 +18,6 @@ type MenuAction =
   | 'openAccount'
   | 'createAccount'
   | 'exit'
-  | 'back'
   | 'addTx'
   | 'removeTx'
   | 'exportCsv'
@@ -49,6 +48,10 @@ export class ApplicationController {
       }
 
       if (selected.action === 'openAccount') {
+        if (!selected.accountId) {
+          await this.pause('Не выбран счёт');
+          continue;
+        }
         await this.watchAccount(selected.accountId);
         continue;
       }
@@ -61,6 +64,8 @@ export class ApplicationController {
     | { action: 'openAccount'; accountId: string }
   > {
     console.clear();
+
+    console.log(title('Budget Tracker CLI') + '\n');
 
     const accounts = this.accountManager.listAccounts();
 
