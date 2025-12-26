@@ -2,6 +2,12 @@ import inquirer from 'inquirer';
 
 import type { TransactionType } from '../interfaces/index.js';
 import { Account, AccountManager, Transaction } from './index.js';
+import {
+  pressEnterLabel,
+  title,
+  formatMoney,
+  shortId,
+} from '../utils/cliUi.js';
 
 type MenuAction =
   | 'openAccount'
@@ -59,7 +65,9 @@ export class ApplicationController {
     }> = accounts.map((a) => {
       const s = a.getSummary();
       return {
-        name: `${a.name} | баланс: ${s.balance} | транзакций: ${s.transactionsCount}`,
+        name: `${a.name} | баланс: ${formatMoney(s.balance)} | tx: ${
+          s.transactionsCount
+        } | ${shortId(a.id)}`,
         value: { action: 'openAccount', accountId: a.id },
       };
     });
@@ -126,7 +134,7 @@ export class ApplicationController {
         {
           type: 'list',
           name: 'action',
-          message: `Счёт: ${account.name}`,
+          message: `Меню счёта — ${account.name}`,
           choices: [
             { name: '📌 Показать сводку', value: 'back' }, // просто покажем ниже, а потом меню снова
             { name: '➕ Добавить транзакцию', value: 'addTx' },
@@ -178,13 +186,13 @@ export class ApplicationController {
 
     console.clear();
     console.log(account.getSummaryString());
-    console.log('\nТранзакции:\n');
+    console.log('\n' + title('Транзакции') + '\n');
 
     if (account.transactions.length === 0) {
       console.log('— транзакций пока нет —');
     } else {
       account.transactions.forEach((t, i) => {
-        console.log(`${i + 1}. ${t.toString()}`);
+        console.log(`${String(i + 1).padStart(2, '0')}. ${t.toString()}`);
       });
     }
 
@@ -373,7 +381,7 @@ export class ApplicationController {
       console.log('\n' + message);
     }
     await inquirer.prompt([
-      { type: 'input', name: '_', message: 'Enter — продолжить' },
+      { type: 'input', name: '_', message: pressEnterLabel() },
     ]);
   }
 }

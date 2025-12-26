@@ -1,5 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 
+import { shortId, title, formatMoney } from '../utils/index.js';
+
 import type {
   IAccount,
   ITransaction,
@@ -106,12 +108,14 @@ export class Account implements IAccount {
 
   getSummaryString(): string {
     const s = this.getSummary();
+
     return [
-      `Счёт: ${this._name}`,
+      title(`Счёт: ${this._name}`),
       `ID: ${shortId(this._id)}`,
       `Создан: ${this._createdAt.slice(0, 10)}`,
-      `Баланс: ${s.balance}`,
-      `Доходы: ${s.income} | Расходы: ${s.expense}`,
+      '',
+      `Баланс: ${formatMoney(s.balance)}`,
+      `Доходы: ${formatMoney(s.income)} | Расходы: ${formatMoney(s.expense)}`,
       `Транзакций: ${s.transactionsCount}`,
     ].join('\n');
   }
@@ -164,8 +168,4 @@ function todayIso(): string {
 function isIsoDateTime(value: string): boolean {
   const d = new Date(value);
   return Number.isFinite(d.getTime()) && value.includes('T');
-}
-
-function shortId(id: string): string {
-  return id.length <= 8 ? id : `${id.slice(0, 4)}…${id.slice(-4)}`;
 }
